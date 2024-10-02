@@ -12,12 +12,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-// Retraso para el anti-rebote
-#define DEBOUNCE_DELAY 50
 
-// Modos de conteo
-#define MODE_BINARY 0
-#define MODE_DECADES 1
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -26,56 +21,41 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-TIM_HandleTypeDef htim8;
+UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-uint8_t mode = MODE_BINARY;  // Modo actual del contador (binario o décadas)
-uint8_t counter = 0;         // Contador de 4 bits
+// Variables globales
+#define Led_1 LED1_Pin
+#define Led_2 LED2_Pin
+#define Led_3 LED3_Pin
+#define Led_4 LED4_Pin
+#define Modo BTM3_Pin
+#define Mas BTM1_Pin
+#define Menos BTM2_Pin
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_TIM8_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
-uint8_t read_button(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin);
-void update_LEDs(uint8_t value);
+int modo(int);
+void mostrarBinario(uint8_t numero);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-// Función para leer un botón con anti-rebote
-uint8_t read_button(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin) {
-  if (HAL_GPIO_ReadPin(GPIOx, GPIO_Pin) == GPIO_PIN_RESET) {
-    HAL_Delay(DEBOUNCE_DELAY);
-    if (HAL_GPIO_ReadPin(GPIOx, GPIO_Pin) == GPIO_PIN_RESET) {
-      return 1;  // Botón presionado
-    }
-  }
-  return 0;  // Botón no presionado
+void mostrarBinario(uint8_t numero) {
+    HAL_GPIO_WritePin(GPIOA, Led_1, (numero & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOA, Led_2, (numero >> 1 & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOA, Led_3, (numero >> 2 & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOA, Led_4, (numero >> 3 & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
-// Función para actualizar el estado de los LEDs según el valor del contador
-void update_LEDs(uint8_t value) {
-  if (mode == MODE_BINARY) {
-    // Actualización para el modo binario
-    HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, (value & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, (value & 0x02) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, (value & 0x04) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(LED4_GPIO_Port, LED4_Pin, (value & 0x08) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-  } else {
-    // Actualización para el modo de décadas
-    // Enciende un solo LED según el valor actual del contador (0-9)
-    HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, (value == 0) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, (value == 1) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, (value == 2) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(LED4_GPIO_Port, LED4_Pin, (value == 3) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    // Continúa con la lógica hasta el valor 9
-  }
+// Función para determinar el modo
+int modo(int x) {
+    return (x == GPIO_PIN_RESET) ? 0 : 1;
 }
-
-
 /* USER CODE END 0 */
 
 /**
@@ -86,13 +66,18 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+	uint8_t b1_state = 1;
+	uint8_t last_b1_state = 1;
+	uint8_t b2_state = 0;
+	uint8_t last_b2_state = 0;
+	uint8_t count = 1;
+	uint8_t count2 = 4;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-   HAL_Init();
+  HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -107,7 +92,8 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_TIM8_Init();
+
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -116,41 +102,108 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+
+	  /* Lee el botón de modo. O es decena, 1 es binario*/
+	      int m = modo(HAL_GPIO_ReadPin(BTM3_GPIO_Port, Modo));
+
+	      /* Si está en modo decena*/
+	      if (m == 0) {
+	    	  /* Lee el botón más - incrementa la cuenta */
+	          b1_state = HAL_GPIO_ReadPin(BTM1_GPIO_Port, Mas);
+	          if (b1_state != last_b1_state) {
+	              if (b1_state == GPIO_PIN_RESET) { // Botón presionado */
+	            	  /* Mostrar el valor actual en los LEDs */
+	            	  if (count2 == 1) {
+	            	  			  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, 1);
+	            	  			  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 0);
+	            	  			  HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 0);
+	            	  			  HAL_GPIO_WritePin(LED4_GPIO_Port, LED4_Pin, 0);
+	            	  			  count = count2+1;
+	            	  		  }
+	            	  		  if (count2 == 2) {
+	            	  			  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, 0);
+	            	  			  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 1);
+	            	  			  HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 0);
+	            	  			  HAL_GPIO_WritePin(LED4_GPIO_Port, LED4_Pin, 0);
+	            	  			  count = count2+1;
+	            	  		  	}
+	            	  		  if (count2 == 3) {
+	            	  			  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, 0);
+	            	  			  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 0);
+	            	  			  HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 1);
+	            	  			  HAL_GPIO_WritePin(LED4_GPIO_Port, LED4_Pin, 0);
+	            	  			  count = count2+1;
+	            	  		  	}
+	            	  		  if (count2 == 4) {
+	            	  			  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, 0);
+	            	  			  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 0);
+	            	  			  HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 0);
+	            	  			  HAL_GPIO_WritePin(LED4_GPIO_Port, LED4_Pin, 1);
+	            	  			  count = count2-4;
+	            	  		  	}
+	            	  		  /* Disminuir el contador y reiniciar a 4*/
+	            	  		  if (count2 == 0) {
+	            	  			  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, 0);
+	            	  			  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 0);
+	            	  			  HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 0);
+	            	  			  HAL_GPIO_WritePin(LED4_GPIO_Port, LED4_Pin, 0);
+	            	  		      count2 = 4;
+	            	  		      count = count2+1;
+	            	  		   } else {
+	            	  		      count2--;
+	            	  		     }
+	                  HAL_Delay(200); /* Esperar para evitar rebote */
+	              }
+	              last_b1_state = b1_state;
+	          }
+
+	          /* Botón menos - disminuye */
+	          b2_state = HAL_GPIO_ReadPin(BTM2_GPIO_Port, Menos);
+	          if (b2_state != last_b2_state) {
+	              if (b2_state == GPIO_PIN_SET) { // Botón presionado
+	                  if (count2 == 0) {
+	                      HAL_GPIO_WritePin(GPIOA, LED1_Pin | LED2_Pin | LED3_Pin | LED4_Pin, GPIO_PIN_RESET);
+	                      count2 = 4;
+	                  } else {
+	                      count2--;
+	                  }
+	                  mostrarBinario(count2);
+	                  HAL_Delay(200); // Esperar para evitar rebote
+	              }
+	              last_b2_state = b2_state;
+	          }
+	      } else { // Modo binario
+	          // Lee el botón más - incrementa la cuenta
+	          b1_state = HAL_GPIO_ReadPin(BTM1_GPIO_Port, Mas);
+	          if (b1_state != last_b1_state) {
+	              if (b1_state == GPIO_PIN_RESET) {
+	                  count = (count + 1) % 16; // Incrementa y vuelve a 0 después de 15
+	                  mostrarBinario(count);
+	                  HAL_Delay(200);
+	              }
+	              last_b1_state = b1_state;
+	          }
+
+	          // Botón menos - disminuye
+	          b2_state = HAL_GPIO_ReadPin(BTM2_GPIO_Port, Menos);
+	          if (b2_state != last_b2_state) {
+	              if (b2_state == GPIO_PIN_SET) {
+	                  count = (count - 1); // Decrementa y vuelve a 15 después de 0
+	                  if (count==-1){
+	                  }
+	                  mostrarBinario(count);
+	                  HAL_Delay(200);
+	              }
+	              last_b2_state = b2_state;
+	          }
+	      }
+
+  }
     /* USER CODE END WHILE */
-	  // Leer el botón de modo (cambia entre binario y décadas)
-	      if (read_button(BTM1_GPIO_Port, BTM1_Pin)) {
-	        mode = (mode == MODE_BINARY) ? MODE_DECADES : MODE_BINARY;
-	        HAL_Delay(200);  // Esperar para evitar cambios rápidos de modo
-	      }
-
-	      // Leer el botón de incremento
-	      if (read_button(BTM2_GPIO_Port, BTM2_Pin)) {
-	        if (mode == MODE_BINARY) {
-	          counter = (counter + 1) & 0x0F;  // Incrementar en binario (0-15)
-	        } else {
-	          counter = (counter < 9) ? counter + 1 : 0;  // Incrementar en décadas (0-9)
-	        }
-	        update_LEDs(counter);  // Actualizar LEDs
-	        HAL_Delay(200);        // Esperar para evitar múltiples pulsaciones
-	      }
-
-	      // Leer el botón de decremento
-	      if (read_button(BTM3_GPIO_Port, BTM3_Pin)) {
-	        if (mode == MODE_BINARY) {
-	          counter = (counter == 0) ? 15 : counter - 1;  // Decrementar en binario (0-15)
-	        } else {
-	          counter = (counter == 0) ? 9 : counter - 1;   // Decrementar en décadas (0-9)
-	        }
-	        update_LEDs(counter);  // Actualizar LEDs
-	        HAL_Delay(200);        // Esperar para evitar múltiples pulsaciones
-	      }
-
-	      HAL_Delay(50);
 
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
-}
 
 /**
   * @brief System Clock Configuration
@@ -172,7 +225,13 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLM = 16;
+  RCC_OscInitStruct.PLL.PLLN = 336;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
+  RCC_OscInitStruct.PLL.PLLQ = 2;
+  RCC_OscInitStruct.PLL.PLLR = 2;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -182,61 +241,47 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }
 }
 
 /**
-  * @brief TIM8 Initialization Function
+  * @brief USART2 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_TIM8_Init(void)
+static void MX_USART2_UART_Init(void)
 {
 
-  /* USER CODE BEGIN TIM8_Init 0 */
+  /* USER CODE BEGIN USART2_Init 0 */
 
-  /* USER CODE END TIM8_Init 0 */
+  /* USER CODE END USART2_Init 0 */
 
-  TIM_SlaveConfigTypeDef sSlaveConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  /* USER CODE BEGIN USART2_Init 1 */
 
-  /* USER CODE BEGIN TIM8_Init 1 */
-
-  /* USER CODE END TIM8_Init 1 */
-  htim8.Instance = TIM8;
-  htim8.Init.Prescaler = 0;
-  htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim8.Init.Period = 65535;
-  htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim8.Init.RepetitionCounter = 0;
-  htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim8) != HAL_OK)
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
   {
     Error_Handler();
   }
-  sSlaveConfig.SlaveMode = TIM_SLAVEMODE_EXTERNAL1;
-  sSlaveConfig.InputTrigger = TIM_TS_ITR0;
-  if (HAL_TIM_SlaveConfigSynchro(&htim8, &sSlaveConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim8, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM8_Init 2 */
+  /* USER CODE BEGIN USART2_Init 2 */
 
-  /* USER CODE END TIM8_Init 2 */
+  /* USER CODE END USART2_Init 2 */
 
 }
 
@@ -255,9 +300,16 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, LED1_Pin|LED2_Pin|LED3_Pin|LED4_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : B1_Pin */
+  GPIO_InitStruct.Pin = B1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LED1_Pin LED2_Pin LED3_Pin LED4_Pin */
   GPIO_InitStruct.Pin = LED1_Pin|LED2_Pin|LED3_Pin|LED4_Pin;
@@ -266,11 +318,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : BTM3_Pin */
-  GPIO_InitStruct.Pin = BTM3_Pin;
+  /*Configure GPIO pin : BTM1_Pin */
+  GPIO_InitStruct.Pin = BTM1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(BTM3_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(BTM1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : BTM2_Pin */
   GPIO_InitStruct.Pin = BTM2_Pin;
@@ -278,11 +330,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(BTM2_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : BTM1_Pin */
-  GPIO_InitStruct.Pin = BTM1_Pin;
+  /*Configure GPIO pin : BTM3_Pin */
+  GPIO_InitStruct.Pin = BTM3_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(BTM1_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(BTM3_GPIO_Port, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
